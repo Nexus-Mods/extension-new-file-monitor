@@ -1,0 +1,25 @@
+{
+  "name": "new-file-monitor",
+  "version": "0.0.1",
+  "description": "generate events when new files are added to a mod directory",
+  "main": "./out/index.js",
+  "scripts": {
+    "webpack": "webpack --config webpack.config.js --display-error-details --progress --profile --color",
+    "installDev": "copyfiles -f dist/* ../../out/bundledPlugins/nmm-import-tool",
+    "build": "npm run webpack && copyfiles -f src/stylesheets/import-tool.scss dist && copyfiles -f src/images/* dist && extractInfo",
+    "buildDev": "npm run build && npm run installDev"
+  },
+  "author": "Black Tree Gaming Ltd.",
+  "license": "GPL-3.0",
+  "devDependencies": {
+    "@types/node": "^13.5.1",
+    "copyfiles": "^2.2.0",
+    "redux": "^4.0.5",
+    "ts-loader": "^6.2.1",
+    "turbowalk": "Nexus-Mods/node-turbowalk",
+    "typescript": "^3.7.5",
+    "vortex-api": "Nexus-Mods/vortex-api",
+    "webpack": "^4.41.5",
+    "webpack-cli": "^3.3.10"
+  }
+}
