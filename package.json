@@ -5,7 +5,7 @@
   "main": "./out/index.js",
   "scripts": {
     "webpack": "webpack --config webpack.config.js --display-error-details --progress --profile --color",
-    "installDev": "copyfiles -f dist/* ../../out/bundledPlugins/nmm-import-tool",
+    "installDev": "copyfiles -f dist/* ../../out/bundledPlugins/new-file-monitor",
     "build": "npm run webpack && copyfiles -f src/stylesheets/import-tool.scss dist && copyfiles -f src/images/* dist && extractInfo",
     "buildDev": "npm run build && npm run installDev"
   },
