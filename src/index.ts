@@ -170,71 +170,105 @@ function figureOutBasePaths(tree: ITree): string[] {
   return bases;
 }
 
-function makeOnWillDeploy(api: types.IExtensionApi) {
-  return async (profileId: string,
-                deployment: IDeployment) => {
-    const state: types.IState = api.store.getState();
-    const profile = selectors.profileById(state, profileId);
+async function createSnapshot(api: types.IExtensionApi,
+                              profileId: string,
+                              deployment: IDeployment) {
+  const state: types.IState = api.store.getState();
+  const profile = selectors.profileById(state, profileId);
 
-    const game = util.getGame(profile.gameId);
-    const discovery = selectors.discoveryByGame(state, game.id);
+  const game = util.getGame(profile.gameId);
+  const discovery = selectors.discoveryByGame(state, game.id);
 
-    const modPaths = game.getModPaths(discovery.path);
+  const modPaths = game.getModPaths(discovery.path);
 
-    const snapshotPath =
-      path.join(util.getVortexPath('userData' as any), game.id, 'snapshots', 'snapshot.json');
+  const fullDeployment = deployment !== undefined
+    ? await consolidate(deployment, modPaths)
+    : { owners: new Set<string>(), directories: {}, files: {} };
+  const basePaths = figureOutBasePaths(fullDeployment);
 
-    const fullDeployment = await consolidate(deployment, modPaths);
+  const roots: Array<{ basePath: string, entries: string[] }> = [];
 
-    const basePaths = figureOutBasePaths(fullDeployment);
+  await Promise.all(basePaths.map(async basePath => {
+    const entries = await snapshot(basePath, fullDeployment);
+    roots.push({ basePath, entries });
+  }));
+  return roots;
+}
 
-    const roots = [];
+async function checkForFileChanges(api: types.IExtensionApi,
+                                   profileId: string,
+                                   deployment: IDeployment) {
+  const state: types.IState = api.store.getState();
+  const profile = selectors.profileById(state, profileId);
 
-    try {
-      const oldSnapshot = JSON.parse(await fs.readFileAsync(snapshotPath, { encoding: 'utf-8' }));
+  const game = util.getGame(profile.gameId);
+  const discovery = selectors.discoveryByGame(state, game.id);
 
-      await Promise.all(basePaths.map(async basePath => {
-        const oldEntries = oldSnapshot.find(iter => iter.basePath === basePath);
-        const entries = await snapshot(basePath, fullDeployment);
+  const modPaths = game.getModPaths(discovery.path);
 
-        if (oldEntries === undefined) {
-          log('info', 'no old entries for path', { basePath });
-        } else {
-          const normalize = await util.getNormalizeFunc(basePath,
-            { relative: false, separators: false, unicode: false });
-          const { added, removed } = compareEntries(normalize, oldEntries.entries, entries);
-          const normTree = (util as any).makeNormalizingDict(fullDeployment, normalize);
-          const baseTree = getTree(normTree, basePath, true);
-          if (added.length > 0) {
-            await api.emitAndAwait('added-files', profileId, added.map(filePath => {
-              const treeEntry = getTree(baseTree, path.dirname(filePath), false);
-              return {
-                filePath: path.join(basePath, filePath),
-                candidates: Array.from(treeEntry.owners),
-              };
-            }));
-          }
-          if (removed.length > 0) {
-            await api.emitAndAwait('removed-files', profileId, removed.map(filePath => {
-              const treeEntry = getTree(baseTree, path.dirname(filePath), false);
-              return {
-                filePath: path.join(basePath, filePath),
-                candidates: Array.from(treeEntry.owners),
-              };
-            }));
-          }
+  const snapshotPath =
+    path.join(util.getVortexPath('userData' as any), game.id, 'snapshots', 'snapshot.json');
+
+  const fullDeployment = await consolidate(deployment, modPaths);
+
+  const basePaths = figureOutBasePaths(fullDeployment);
+
+  const roots: Array<{ basePath: string, entries: string[] }> = [];
+
+  try {
+    const oldSnapshot = JSON.parse(await fs.readFileAsync(snapshotPath, { encoding: 'utf-8' }));
+
+    await Promise.all(basePaths.map(async basePath => {
+      const oldEntries = oldSnapshot.find(iter => iter.basePath === basePath);
+      const entries = await snapshot(basePath, fullDeployment);
+
+      if (oldEntries === undefined) {
+        log('info', 'no old entries for path', { basePath });
+      } else {
+        const normalize = await util.getNormalizeFunc(basePath,
+          { relative: false, separators: false, unicode: false });
+        const { added, removed } = compareEntries(normalize, oldEntries.entries, entries);
+        const normTree = (util as any).makeNormalizingDict(fullDeployment, normalize);
+        const baseTree = getTree(normTree, basePath, true);
+        if (added.length > 0) {
+          await api.emitAndAwait('added-files', profileId, added.map(filePath => {
+            const treeEntry = getTree(baseTree, path.dirname(filePath), false);
+            return {
+              filePath: path.join(basePath, filePath),
+              candidates: Array.from(treeEntry.owners),
+            };
+          }));
         }
-
-        roots.push({ basePath, entries });
-      }));
-
-      await saveSnapshot(snapshotPath, roots);
-    } catch (err) {
-      if (err.code !== 'ENOENT') {
-        api.showErrorNotification('Failed to check for added files', err);
+        if (removed.length > 0) {
+          await api.emitAndAwait('removed-files', profileId, removed.map(filePath => {
+            const treeEntry = getTree(baseTree, path.dirname(filePath), false);
+            return {
+              filePath: path.join(basePath, filePath),
+              candidates: Array.from(treeEntry.owners),
+            };
+          }));
+        }
       }
+
+      roots.push({ basePath, entries });
+    }));
+
+    await saveSnapshot(snapshotPath, roots);
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      api.showErrorNotification('Failed to check for added files', err);
     }
-  };
+  }
+}
+
+function makeOnWillDeploy(api: types.IExtensionApi) {
+  return async (profileId: string, deployment: IDeployment) =>
+    checkForFileChanges(api, profileId, deployment);
+}
+
+function makeOnWillPurge(api: types.IExtensionApi) {
+  return async (profileId: string, deployment: IDeployment) =>
+    checkForFileChanges(api, profileId, deployment);
 }
 
 function makeOnDidDeploy(api: types.IExtensionApi) {
@@ -245,34 +279,32 @@ function makeOnDidDeploy(api: types.IExtensionApi) {
                 setTitle: (title: string) => void) => {
     setTitle(t('Creating snapshots', { ns: NAMESPACE }));
 
-    const state: types.IState = api.store.getState();
-    const profile = selectors.profileById(state, profileId);
-
-    const game = util.getGame(profile.gameId);
-    const discovery = selectors.discoveryByGame(state, game.id);
-
-    const modPaths = game.getModPaths(discovery.path);
-
-    const snapshotPath = path.join(util.getVortexPath('userData' as any), game.id,
+    const profile = selectors.profileById(api.store.getState(), profileId);
+    const roots = await createSnapshot(api, profileId, deployment);
+    const snapshotPath = path.join(util.getVortexPath('userData' as any), profile.gameId,
                                    'snapshots', 'snapshot.json');
 
-    const fullDeployment = await consolidate(deployment, modPaths);
-    const basePaths = figureOutBasePaths(fullDeployment);
+    await saveSnapshot(snapshotPath, roots);
+  };
+}
 
-    const roots = [];
+function makeOnDidPurge(api: types.IExtensionApi) {
+  return async (profileId: string) => {
+    const profile = selectors.profileById(api.store.getState(), profileId);
+    const roots = await createSnapshot(api, profileId, undefined);
+    const snapshotPath = path.join(util.getVortexPath('userData' as any), profile.gameId,
+                                   'snapshots', 'snapshot.json');
 
-    await Promise.all(basePaths.map(async basePath => {
-      const entries = await snapshot(basePath, fullDeployment);
-      roots.push({ basePath, entries });
-    }));
     await saveSnapshot(snapshotPath, roots);
   };
 }
 
 function init(context: types.IExtensionContext): boolean {
   context.once(() => {
-    context.api.onAsync('will-deploy', makeOnWillDeploy(context.api) as any);
-    context.api.onAsync('did-deploy', makeOnDidDeploy(context.api) as any);
+    context.api.onAsync('will-deploy', makeOnWillDeploy(context.api));
+    context.api.onAsync('did-deploy', makeOnDidDeploy(context.api));
+    context.api.onAsync('will-purge', makeOnWillPurge(context.api));
+    context.api.onAsync('did-purge', makeOnDidPurge(context.api));
   });
 
   return true;
