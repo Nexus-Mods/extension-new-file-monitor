@@ -138,9 +138,11 @@ async function consolidate(deployment: IDeployment,
 
   await Promise.all(Object.keys(modPaths).map(async modType => {
     const modTypeTree = addToTree(tree, modPaths[modType]);
-    deployment[modType].forEach(deployed => {
-      addToTree(modTypeTree, deployed.relPath, deployed);
-    });
+    if (deployment[modType] !== undefined) {
+      deployment[modType].forEach(deployed => {
+        addToTree(modTypeTree, deployed.relPath, deployed);
+      });
+    }
   }));
 
   return tree;
