@@ -69,12 +69,19 @@ async function snapshot(basePath: string, deployment: ITree): Promise<string[]> 
   const deploymentSet = new Set<string>(getFileList(basePath, tree));
 
   let vanillaFiles: string[] = [];
-  await turbowalk(basePath, (entries: IEntry[]) => {
-    vanillaFiles = [].concat(vanillaFiles,
-      entries
-        .filter(entry => !entry.isDirectory && !deploymentSet.has(entry.filePath))
-        .map(entry => path.relative(basePath, entry.filePath)));
-  }, { recurse: true, details: false, skipLinks: true });
+  try {
+    await turbowalk(basePath, (entries: IEntry[]) => {
+      vanillaFiles = [].concat(vanillaFiles,
+        entries
+          .filter(entry => !entry.isDirectory && !deploymentSet.has(entry.filePath))
+          .map(entry => path.relative(basePath, entry.filePath)));
+    }, { recurse: true, details: false, skipLinks: true });
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      log('error', 'Failed to snapshot directory',
+          { path: basePath, error: err.message });
+    }
+  }
 
   // I _think_ we have to sort here because the api doesn't promise a specific file
   // order, even though it's usually going to be alphabetical.
