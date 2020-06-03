@@ -151,22 +151,29 @@ async function consolidate(deployment: IDeployment,
 function figureOutBasePaths(tree: ITree): string[] {
   const bases: string[] = [];
 
-  // current logic: base paths is every directory that has more than one subdirectory
-  // or contains files
+  // current logic: base paths is every directory that has contains files or
+  // has no subdirectories.
+  // This may miss cases where files are added to directories that previously
+  // had no files at all but the alternative is to consider every directory
+  // that has more than one subdirectory and that may lead to huuuuuuuge
+  // snapshots (potentially even entire drives)
 
-  const getBase = (current: ITree, basePath: string[]): string => {
-    if ((Object.keys(current.files).length > 0)
-        || (Object.keys(current.directories).length !== 1)) {
-      return basePath.join(path.sep);
+  const getBases = (current: ITree, basePath: string[]): string[] => {
+    if ((current === undefined)
+        || (Object.keys(current.files).length > 0)
+        || (Object.keys(current.directories).length === 0)) {
+      return [basePath.join(path.sep)];
     }
 
-    const dirName = Object.keys(current.directories)[0];
-    return getBase(current.directories[dirName], [].concat(basePath, dirName));
+    return Object.keys(current.directories)
+      .reduce((agg, dirName) => {
+        agg.push(...getBases(current.directories[dirName], [].concat(basePath, dirName)));
+        return agg;
+      }, []);
   };
 
   Object.keys(tree.directories).forEach(dirName => {
-    const base = getBase(tree.directories[dirName], [dirName]);
-    bases.push(base);
+    bases.push(...getBases(tree.directories[dirName], [dirName]));
   });
 
   return bases;
