@@ -90,7 +90,7 @@ async function snapshot(basePath: string, deployment: ITree): Promise<string[]> 
 
 async function saveSnapshot(filePath: string, data: any) {
   await fs.ensureDirWritableAsync(path.dirname(filePath));
-  await fs.writeFileAsync(filePath, JSON.stringify(data, undefined, 2), { encoding: 'utf-8' });
+  await (util as any).writeFileAtomic(filePath, JSON.stringify(data, undefined, 2));
 }
 
 function compareEntries(normalize: (input: string) => string, before: string[], after: string[]) {
@@ -272,7 +272,9 @@ async function checkForFileChanges(api: types.IExtensionApi,
     await saveSnapshot(snapshotPath, roots);
   } catch (err) {
     if (err.code !== 'ENOENT') {
-      api.showErrorNotification('Failed to check for added files', err);
+      // previously generated an error notification but most of the time a
+      // failure here isn't really a problem
+      log('error', 'Failed to check for added files', err.message);
     }
   }
 }
