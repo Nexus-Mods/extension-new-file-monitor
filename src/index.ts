@@ -244,7 +244,7 @@ async function checkForFileChanges(api: types.IExtensionApi,
         const normalize = await util.getNormalizeFunc(basePath,
           { relative: false, separators: false, unicode: false });
         const { added, removed } = compareEntries(normalize, oldEntries.entries, entries);
-        const normTree = (util as any).makeNormalizingDict(fullDeployment, normalize);
+        const normTree = util.makeNormalizingDict(fullDeployment, normalize);
         const baseTree = getTree(normTree, basePath, true);
         if (added.length > 0) {
           await api.emitAndAwait('added-files', profileId, added.map(filePath => {
@@ -298,22 +298,36 @@ function makeOnDidDeploy(api: types.IExtensionApi) {
     setTitle(t('Creating snapshots', { ns: NAMESPACE }));
 
     const profile = selectors.profileById(api.store.getState(), profileId);
-    const roots = await createSnapshot(api, profileId, deployment);
     const snapshotPath = path.join(util.getVortexPath('userData' as any), profile.gameId,
-                                   'snapshots', 'snapshot.json');
+      'snapshots', 'snapshot.json');
 
-    await saveSnapshot(snapshotPath, roots);
+    try {
+      const roots = await createSnapshot(api, profileId, deployment);
+      await saveSnapshot(snapshotPath, roots);
+    } catch (err) {
+      log('error', 'failed to create/update snapshot', err.message);
+      // don't leave an outdated snapshot, otherwise we may report files that
+      // were part of mods
+      await fs.removeAsync(snapshotPath);
+    }
   };
 }
 
 function makeOnDidPurge(api: types.IExtensionApi) {
   return async (profileId: string) => {
     const profile = selectors.profileById(api.store.getState(), profileId);
-    const roots = await createSnapshot(api, profileId, undefined);
     const snapshotPath = path.join(util.getVortexPath('userData' as any), profile.gameId,
-                                   'snapshots', 'snapshot.json');
+      'snapshots', 'snapshot.json');
 
-    await saveSnapshot(snapshotPath, roots);
+    try {
+      const roots = await createSnapshot(api, profileId, undefined);
+      await saveSnapshot(snapshotPath, roots);
+    } catch (err) {
+      log('error', 'failed to create/update snapshot', err.message);
+      // don't leave an outdated snapshot, otherwise we may report files that
+      // were part of mods
+      await fs.removeAsync(snapshotPath);
+    }
   };
 }
 
