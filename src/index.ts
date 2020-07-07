@@ -206,6 +206,7 @@ async function createSnapshot(api: types.IExtensionApi,
 
   await Promise.all(basePaths.map(async basePath => {
     const entries = await snapshot(basePath, fullDeployment);
+    log('debug', 'snapshot generated', { path: basePath, fileCount: entries.length });
     roots.push({ basePath, entries });
   }));
   return roots;
