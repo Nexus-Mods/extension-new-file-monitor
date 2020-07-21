@@ -299,6 +299,10 @@ function makeOnDidDeploy(api: types.IExtensionApi) {
     setTitle(t('Creating snapshots', { ns: NAMESPACE }));
 
     const profile = selectors.profileById(api.store.getState(), profileId);
+    if (profile === undefined) {
+      log('error', 'will-purge event with invalid profile id', { profileId });
+      return;
+    }
     const snapshotPath = path.join(util.getVortexPath('userData' as any), profile.gameId,
       'snapshots', 'snapshot.json');
 
@@ -317,6 +321,10 @@ function makeOnDidDeploy(api: types.IExtensionApi) {
 function makeOnDidPurge(api: types.IExtensionApi) {
   return async (profileId: string) => {
     const profile = selectors.profileById(api.store.getState(), profileId);
+    if (profile === undefined) {
+      log('error', 'did-purge event with invalid profile id', { profileId });
+      return;
+    }
     const snapshotPath = path.join(util.getVortexPath('userData' as any), profile.gameId,
       'snapshots', 'snapshot.json');
 
