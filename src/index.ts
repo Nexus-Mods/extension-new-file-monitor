@@ -313,7 +313,13 @@ function makeOnDidDeploy(api: types.IExtensionApi) {
       log('error', 'failed to create/update snapshot', err.message);
       // don't leave an outdated snapshot, otherwise we may report files that
       // were part of mods
-      await fs.removeAsync(snapshotPath);
+      try {
+        await fs.removeAsync(snapshotPath);
+      } catch (err) {
+        if (!(err instanceof util.UserCanceled)) {
+          log('error', 'failed to delete outdated snapshot', err.message);
+        }
+      }
     }
   };
 }
