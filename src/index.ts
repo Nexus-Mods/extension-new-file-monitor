@@ -195,6 +195,10 @@ async function createSnapshot(api: types.IExtensionApi,
   const game = util.getGame(profile.gameId);
   const discovery = selectors.discoveryByGame(state, game.id);
 
+  if (discovery?.path === undefined) {
+    return undefined;
+  }
+
   const modPaths = game.getModPaths(discovery.path);
 
   const fullDeployment = deployment !== undefined
@@ -220,6 +224,10 @@ async function checkForFileChanges(api: types.IExtensionApi,
 
   const game = util.getGame(profile.gameId);
   const discovery = selectors.discoveryByGame(state, game.id);
+
+  if (discovery?.path === undefined) {
+    return;
+  }
 
   const modPaths = game.getModPaths(discovery.path);
 
@@ -308,7 +316,9 @@ function makeOnDidDeploy(api: types.IExtensionApi) {
 
     try {
       const roots = await createSnapshot(api, profileId, deployment);
-      await saveSnapshot(snapshotPath, roots);
+      if (roots !== undefined) {
+        await saveSnapshot(snapshotPath, roots);
+      }
     } catch (err) {
       log('error', 'failed to create/update snapshot', err.message);
       // don't leave an outdated snapshot, otherwise we may report files that
@@ -336,7 +346,9 @@ function makeOnDidPurge(api: types.IExtensionApi) {
 
     try {
       const roots = await createSnapshot(api, profileId, undefined);
-      await saveSnapshot(snapshotPath, roots);
+      if (roots !== undefined) {
+        await saveSnapshot(snapshotPath, roots);
+      }
     } catch (err) {
       log('error', 'failed to create/update snapshot', err.message);
       // don't leave an outdated snapshot, otherwise we may report files that
