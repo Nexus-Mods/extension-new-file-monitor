@@ -1,6 +1,6 @@
 {
   "name": "new-file-monitor",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "generate events when new files are added to a mod directory",
   "main": "./out/index.js",
   "scripts": {
