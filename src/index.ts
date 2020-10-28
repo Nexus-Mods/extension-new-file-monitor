@@ -1,6 +1,5 @@
 import { NAMESPACE } from './globals';
 
-import * as Bluebird from 'bluebird';
 import * as path from 'path';
 import turbowalk, { IEntry } from 'turbowalk';
 import { fs, log, selectors, types, util } from 'vortex-api';
@@ -289,8 +288,8 @@ async function checkForFileChanges(api: types.IExtensionApi,
   }
 }
 
-function makeOnCheckModsVersion(api: types.IExtensionApi) {
-  return async (gameMode: string, mods: { [modId: string]: types.IMod }) => {
+function makeOnWillRemoveMod(api: types.IExtensionApi) {
+  return async (gameMode: string, modId: string) => {
     const state = api.store.getState();
     const discovery = util.getSafe(state,
       ['settings', 'gameMode', 'discovered', gameMode], undefined);
@@ -317,52 +316,12 @@ function makeOnCheckModsVersion(api: types.IExtensionApi) {
       }
       return;
     }
-    return Bluebird.Promise.each(modTypes, modType =>
+    return Promise.all(modTypes.map(modType =>
       util.getManifest(api, modType, gameMode)
-        .then(manifest => lastDeployment[modType] = manifest.files))
+        .then(manifest => lastDeployment[modType] = manifest.files)))
       .then(async () => {
-        const fullDeployment = await consolidate(lastDeployment, modPaths);
-        const basePaths = figureOutBasePaths(fullDeployment);
         const profileId = selectors.lastActiveProfileForGame(state, gameMode);
-        return checkForFileChanges(api, profileId, lastDeployment)
-          .then(async () => {
-            // Any newly added/removed files have been discovered at this point.
-            //  Stardew Valley and other game extensions will copy the new files
-            //  into the staging folder and delete them from the mod's folder.
-            // We need to ensure that the new files get re-deployed to the mods folder
-            //  as there's no guarantee that the user will purge/deploy once the update is
-            //  finished - which means the new files will not be picked up by the game if
-            //  he chooses to run the game immediately after the update check completes.
-            let newSnap;
-            try {
-              newSnap = JSON.parse(await fs.readFileAsync(snapshotPath,
-                { encoding: 'utf-8' }));
-            } catch (err) {
-              return Promise.reject(err);
-            }
-            let modIds: string[] = [];
-            return Bluebird.Promise.each(basePaths, async basePath => {
-              const normalize = await util.getNormalizeFunc(basePath,
-                { relative: false, separators: false, unicode: false });
-              const { added } = compareEntries(normalize, oldSnap[0].entries, newSnap[0].entries);
-              modIds = [].concat(modIds, added.reduce((accum, add) => {
-                // Find the owner of the changed file - we only care for files
-                //  we're able to confirm have a single owner.
-                const tree = getTree(fullDeployment,
-                  path.join(newSnap[0].basePath, path.dirname(add)), false);
-                if (tree.owners.size === 1) {
-                  accum.push([...tree.owners][0]);
-                } else {
-                  log('warn', 'unable to find owner of file',
-                    path.join(newSnap[0].basePath, add));
-                }
-                return accum;
-              }, []));
-              return Promise.resolve();
-            })
-            .then(() => Bluebird.Promise.each(modIds, id =>
-              api.emitAndAwait('deploy-single-mod', gameMode, id)));
-          });
+        return checkForFileChanges(api, profileId, lastDeployment);
       })
       .catch(err => {
         log('error', 'Failed to check for added files', err.message);
@@ -447,7 +406,7 @@ function init(context: types.IExtensionContext): boolean {
     context.api.onAsync('did-deploy', makeOnDidDeploy(context.api));
     context.api.onAsync('will-purge', makeOnWillPurge(context.api));
     context.api.onAsync('did-purge', makeOnDidPurge(context.api));
-    context.api.onAsync('check-mods-version', makeOnCheckModsVersion(context.api));
+    context.api.onAsync('will-remove-mod', makeOnWillRemoveMod(context.api));
   });
 
   return true;
