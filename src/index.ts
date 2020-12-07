@@ -221,6 +221,10 @@ async function checkForFileChanges(api: types.IExtensionApi,
                                    deployment: IDeployment) {
   const state: types.IState = api.store.getState();
   const profile = selectors.profileById(state, profileId);
+  if (profile === undefined) {
+    log('error', 'event with invalid profile id', { profileId });
+    return;
+  }
 
   const game = util.getGame(profile.gameId);
   const discovery = selectors.discoveryByGame(state, game.id);
