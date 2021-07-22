@@ -1,5 +1,6 @@
 import { NAMESPACE } from './globals';
 
+import Bluebird from 'bluebird';
 import * as path from 'path';
 import turbowalk, { IEntry } from 'turbowalk';
 import { fs, log, selectors, types, util } from 'vortex-api';
@@ -90,7 +91,9 @@ async function snapshot(basePath: string, deployment: ITree): Promise<string[]> 
 
 async function saveSnapshot(filePath: string, data: any) {
   await fs.ensureDirWritableAsync(path.dirname(filePath));
+  const before = Date.now();
   await (util as any).writeFileAtomic(filePath, JSON.stringify(data, undefined, 2));
+  log('info', 'file list snapshot saved', { filePath, duration: Date.now() - before });
 }
 
 function compareEntries(normalize: (input: string) => string, before: string[], after: string[]) {
@@ -292,45 +295,54 @@ async function checkForFileChanges(api: types.IExtensionApi,
   }
 }
 
+async function doPreRemoveModCheck(api: types.IExtensionApi, gameId: string, modId: string) {
+  const state = api.store.getState();
+  const discovery = util.getSafe(state,
+    ['settings', 'gameMode', 'discovered', gameId], undefined);
+  const game = util.getGame(gameId);
+  if ((game === undefined)
+    || (discovery?.path === undefined)) {
+    // How?
+    log('error', 'Game no longer available', { gameId });
+    return;
+  }
+
+  log('info', 'checking if files changed upon remove', { modId });
+
+  const modPaths = game.getModPaths(discovery.path);
+  const modTypes = Object.keys(modPaths).filter(key => !!modPaths[key]);
+  const lastDeployment: IDeployment = {};
+  const snapshotPath = path.join(util.getVortexPath('userData' as any),
+    game.id, 'snapshots', 'snapshot.json');
+
+  let oldSnap;
+  try {
+    oldSnap = JSON.parse(await fs.readFileAsync(snapshotPath, { encoding: 'utf-8' }));
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      log('error', 'Failed to check for added files', err.message);
+    }
+    return;
+  }
+  return Promise.all(modTypes.map(modType =>
+    util.getManifest(api, modType, gameId)
+      .then(manifest => lastDeployment[modType] = manifest.files)))
+    .then(async () => {
+      const profileId = selectors.lastActiveProfileForGame(state, gameId);
+      return checkForFileChanges(api, profileId, lastDeployment);
+    })
+    .catch(err => {
+      log('error', 'Failed to check for added files', err.message);
+      return;
+    });
+}
+
 function makeOnWillRemoveMod(api: types.IExtensionApi) {
-  return async (gameMode: string, modId: string) => {
-    const state = api.store.getState();
-    const discovery = util.getSafe(state,
-      ['settings', 'gameMode', 'discovered', gameMode], undefined);
-    const game = util.getGame(gameMode);
-    if ((game === undefined)
-      || (discovery?.path === undefined)) {
-      // How?
-      log('error', 'Game no longer available', { gameMode });
-      return;
-    }
-
-    const modPaths = game.getModPaths(discovery.path);
-    const modTypes = Object.keys(modPaths).filter(key => !!modPaths[key]);
-    const lastDeployment: IDeployment = {};
-    const snapshotPath = path.join(util.getVortexPath('userData' as any),
-      game.id, 'snapshots', 'snapshot.json');
-
-    let oldSnap;
-    try {
-      oldSnap = JSON.parse(await fs.readFileAsync(snapshotPath, { encoding: 'utf-8' }));
-    } catch (err) {
-      if (err.code !== 'ENOENT') {
-        log('error', 'Failed to check for added files', err.message);
-      }
-      return;
-    }
-    return Promise.all(modTypes.map(modType =>
-      util.getManifest(api, modType, gameMode)
-        .then(manifest => lastDeployment[modType] = manifest.files)))
-      .then(async () => {
-        const profileId = selectors.lastActiveProfileForGame(state, gameMode);
-        return checkForFileChanges(api, profileId, lastDeployment);
-      })
-      .catch(err => {
-        log('error', 'Failed to check for added files', err.message);
-        return;
-      });
+  const debouncer = new util.Debouncer((gameId: string, modId: string) => {
+    return Bluebird.resolve(doPreRemoveModCheck(api, gameId, modId));
+  }, 2000, true, true);
+  return async (gameId: string, modId: string) => {
+    debouncer.schedule(undefined, gameId, modId);
   };
 }
 
