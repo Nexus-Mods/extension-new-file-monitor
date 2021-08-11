@@ -295,7 +295,7 @@ async function checkForFileChanges(api: types.IExtensionApi,
   }
 }
 
-async function doPreRemoveModCheck(api: types.IExtensionApi, gameId: string, modId: string) {
+async function doPreRemoveModCheck(api: types.IExtensionApi, gameId: string, modIds: string[]) {
   const state = api.store.getState();
   const discovery = util.getSafe(state,
     ['settings', 'gameMode', 'discovered', gameId], undefined);
@@ -307,7 +307,7 @@ async function doPreRemoveModCheck(api: types.IExtensionApi, gameId: string, mod
     return;
   }
 
-  log('info', 'checking if files changed upon remove', { modId });
+  log('info', 'checking if files changed upon remove', { modIds });
 
   const modPaths = game.getModPaths(discovery.path);
   const modTypes = Object.keys(modPaths).filter(key => !!modPaths[key]);
@@ -337,12 +337,12 @@ async function doPreRemoveModCheck(api: types.IExtensionApi, gameId: string, mod
     });
 }
 
-function makeOnWillRemoveMod(api: types.IExtensionApi) {
-  const debouncer = new util.Debouncer((gameId: string, modId: string) => {
-    return Bluebird.resolve(doPreRemoveModCheck(api, gameId, modId));
+function makeOnWillRemoveMods(api: types.IExtensionApi) {
+  const debouncer = new util.Debouncer((gameId: string, modIds: string[]) => {
+    return Bluebird.resolve(doPreRemoveModCheck(api, gameId, modIds));
   }, 2000, true, true);
-  return async (gameId: string, modId: string) => {
-    debouncer.schedule(undefined, gameId, modId);
+  return async (gameId: string, modIds: string[]) => {
+    debouncer.schedule(undefined, gameId, modIds);
   };
 }
 
@@ -422,7 +422,7 @@ function init(context: types.IExtensionContext): boolean {
     context.api.onAsync('did-deploy', makeOnDidDeploy(context.api));
     context.api.onAsync('will-purge', makeOnWillPurge(context.api));
     context.api.onAsync('did-purge', makeOnDidPurge(context.api));
-    context.api.onAsync('will-remove-mod', makeOnWillRemoveMod(context.api));
+    context.api.onAsync('will-remove-mods', makeOnWillRemoveMods(context.api));
   });
 
   return true;
