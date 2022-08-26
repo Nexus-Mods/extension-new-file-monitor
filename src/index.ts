@@ -341,9 +341,10 @@ function makeOnWillRemoveMods(api: types.IExtensionApi) {
   const debouncer = new util.Debouncer((gameId: string, modIds: string[]) => {
     return Bluebird.resolve(doPreRemoveModCheck(api, gameId, modIds));
   }, 2000, true, true);
-  return async (gameId: string, modIds: string[]) => {
-    debouncer.schedule(undefined, gameId, modIds);
-  };
+  return async (gameId: string, modIds: string[]) =>
+    new Promise<void>((resolve, reject) => {
+      debouncer.schedule(() => resolve(), gameId, modIds);
+    });
 }
 
 function makeOnWillDeploy(api: types.IExtensionApi) {
