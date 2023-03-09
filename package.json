@@ -4,7 +4,7 @@
   "description": "generate events when new files are added to a mod directory",
   "main": "./out/index.js",
   "scripts": {
-    "webpack": "webpack --config webpack.config.js --display-error-details --progress --profile --color",
+    "webpack": "webpack --config webpack.config.js --progress --profile --color",
     "installDev": "copyfiles -f dist/* ../../out/bundledPlugins/new-file-monitor",
     "build": "npm run webpack && copyfiles -f src/stylesheets/import-tool.scss dist && copyfiles -f src/images/* dist && extractInfo",
     "buildDev": "npm run build && npm run installDev"
@@ -15,11 +15,8 @@
     "@types/node": "^13.5.1",
     "copyfiles": "^2.2.0",
     "redux": "^4.0.5",
-    "ts-loader": "^6.2.1",
     "turbowalk": "Nexus-Mods/node-turbowalk",
     "typescript": "^4.4.3",
-    "vortex-api": "Nexus-Mods/vortex-api",
-    "webpack": "^4.41.5",
-    "webpack-cli": "^3.3.10"
+    "vortex-ext-dependencies": "Nexus-Mods/vortex-ext-dependencies"
   }
 }
