@@ -21,7 +21,11 @@ function addToTree(tree: ITree,
   if (entry !== undefined) {
     tree.owners.add(entry.source);
   }
-  filePath.split(path.sep).forEach((iter: string, idx: number, arr: string[]) => {
+
+  // Normalize path and filter out empty segments to prevent undefined tree nodes
+  const segments = filePath.split(path.sep).filter(seg => seg.length > 0);
+
+  segments.forEach((iter: string, idx: number, arr: string[]) => {
     if ((idx === arr.length - 1) && (entry !== undefined)) {
         tree.files[iter] = entry;
     } else {
@@ -33,7 +37,8 @@ function addToTree(tree: ITree,
         };
       }
       tree = tree.directories[iter];
-      if (entry !== undefined) {
+      // Defensive check: ensure tree is defined before accessing owners
+      if (tree !== undefined && entry !== undefined) {
         tree.owners.add(entry.source);
       }
     }
@@ -43,7 +48,8 @@ function addToTree(tree: ITree,
 }
 
 function getTree(tree: ITree, dirPath: string, required: boolean): ITree {
-  const segments = dirPath.split(path.sep);
+  // Filter out empty segments to prevent lookup issues
+  const segments = dirPath.split(path.sep).filter(seg => seg.length > 0);
   for (const seg of segments) {
     const nextTree = tree.directories[seg];
     if (nextTree === undefined) {
