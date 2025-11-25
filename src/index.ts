@@ -37,8 +37,7 @@ function addToTree(tree: ITree,
         };
       }
       tree = tree.directories[iter];
-      // Defensive check: ensure tree is defined before accessing owners
-      if (tree !== undefined && entry !== undefined) {
+      if (entry !== undefined) {
         tree.owners.add(entry.source);
       }
     }
